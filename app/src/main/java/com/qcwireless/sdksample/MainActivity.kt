@@ -1,7 +1,7 @@
 package com.qcwireless.sdksample
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.*
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -25,11 +25,13 @@ import com.oudmon.ble.base.communication.rsp.BaseRspCmd
 import com.oudmon.ble.base.communication.rsp.DeviceNotifyRsp
 import com.oudmon.ble.base.util.DateUtil
 import com.qcwireless.sdksample.databinding.ActivityMainBinding
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val test = Test()
-    private lateinit var myDeviceNotifyListener:MyDeviceNotifyListener
+    private lateinit var myDeviceNotifyListener: MyDeviceNotifyListener
+    private var bluetoothGatt: BluetoothGatt? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,12 +45,12 @@ class MainActivity : AppCompatActivity() {
             requestLocationPermission(this@MainActivity, PermissionCallback())
         }
 
-        myDeviceNotifyListener=MyDeviceNotifyListener()
+        myDeviceNotifyListener = MyDeviceNotifyListener()
 
         binding.run {
             tvName.text = DeviceManager.getInstance().deviceName
             val connect = BleOperateManager.getInstance().isConnected
-            tvConnect.text = connect.toString()
+            tvConnect.text = if (connect) "Connected" else getString(R.string.disconnected)
 
             setOnClickListener(
                 btnSetTime,
@@ -87,11 +89,11 @@ class MainActivity : AppCompatActivity() {
                 pressure1
             ) {
                 when (this) {
-                    tvReconnect->{
-                        BleOperateManager.getInstance().connectDirectly(DeviceManager.getInstance().deviceAddress)
+                    tvReconnect -> {
+                        reconnectDevice()
                     }
-                    tvDisconnect->{
-                        BleOperateManager.getInstance().unBindDevice()
+                    tvDisconnect -> {
+                        disconnectDevice()
                     }
                     btnSetTime -> {
                         test.setTime()
@@ -105,169 +107,212 @@ class MainActivity : AppCompatActivity() {
                     btnTimeUnit -> {
                         test.readMetricAndTimeFormat()
                     }
-                    btnMsgTest->{
+                    btnMsgTest -> {
                         test.pushMsg()
                     }
-                    btnAlarmRead->{
+                    btnAlarmRead -> {
                         test.readAlarm()
                     }
-                    btnAlarmWrite->{
-                        val list= mutableListOf<AlarmNewEntity.AlarmBean>()
-                        val bean=AlarmNewEntity.AlarmBean()
-                        bean.content="1234"
-                        bean.min=DateUtil().todayMin+1
-                        bean.repeatAndEnable=0xff
-                        bean.alarmLength=4+ bean.content.encodeToByteArray().size
+                    btnAlarmWrite -> {
+                        val list = mutableListOf<AlarmNewEntity.AlarmBean>()
+                        val bean = AlarmNewEntity.AlarmBean()
+                        bean.content = "1234"
+                        bean.min = DateUtil().todayMin + 1
+                        bean.repeatAndEnable = 0xff
+                        bean.alarmLength = 4 + bean.content.encodeToByteArray().size
                         list.add(bean)
-                        val entity=AlarmNewEntity()
-                        entity.total=1
-                        entity.data=list
+                        val entity = AlarmNewEntity()
+                        entity.total = 1
+                        entity.data = list
                         test.writeAlar(entity)
                     }
-                    btnSyncBloodoxygen->{
+                    btnSyncBloodoxygen -> {
                         test.bloodOxygen()
                     }
-                    btnTakePicture->{
+                    btnTakePicture -> {
                         test.takePicture()
                     }
-                    btnMusic->{
+                    btnMusic -> {
                         test.music()
                     }
-                    btnCall->{
+                    btnCall -> {
                         test.call()
                     }
-                    btnTarget->{
+                    btnTarget -> {
                         test.setTarget()
                     }
-                    btnWatchFace->{
+                    btnWatchFace -> {
                         test.watchFace()
                     }
-                    btnSleep->{
+                    btnSleep -> {
                         test.sleep()
                     }
-                    btnSleepCalc->{
-//                        test.calc()
-//                        test.newSleep()
+                    btnSleepCalc -> {
                         test.contactList()
                     }
-                    heart1->{
-//                        test.heart()
+                    heart1 -> {
                         test.heartSync()
-//                        LargeDataHandler.getInstance().syncManualHeartRateList(
-//                            0
-//                        ) {
-//                            Log.i("",it.index.toString())
-//                            Log.i("",it.data.size.toString())
-//                        }
-
                     }
-                    heart2->{
+                    heart2 -> {
                         test.bp()
                     }
-                    heart3->{
+                    heart3 -> {
                         test.spo2()
                     }
-                    pressure1->{
+                    pressure1 -> {
                         test.pressure()
                     }
-                    push1 ->{
+                    push1 -> {
                         test.push1()
                     }
-                    push2->{
+                    push2 -> {
                         test.push2()
                     }
-                    temperature1->{
+                    temperature1 -> {
                         test.registerTempCallback()
                         test.syncAutoTemperature()
                     }
-                    temperature2->{
+                    temperature2 -> {
                         test.syncManual()
                     }
-                    userprofile1->{
+                    userprofile1 -> {
                         test.setUserProfile()
                     }
-                    userprofile2->{
+                    userprofile2 -> {
                         test.getUserProfile()
                     }
-                    addListener1->{
-                        BleOperateManager.getInstance().addOutDeviceListener(ListenerKey.Heart,myDeviceNotifyListener)
+                    addListener1 -> {
+                        BleOperateManager.getInstance().addOutDeviceListener(ListenerKey.Heart, myDeviceNotifyListener)
                     }
-                    addListener2->{
+                    addListener2 -> {
                         BleOperateManager.getInstance().removeNotifyListener(ListenerKey.Heart)
                     }
-                    addListener3->{
+                    addListener3 -> {
                         BleOperateManager.getInstance().removeNotifyListener(ListenerKey.All)
                     }
-                    ota->{
+                    ota -> {
                         startKtxActivity<OtaActivity>()
                     }
-                    bt->{
-//                        //获取BT的地址和名称
-//                        LargeDataHandler.getInstance().syncClassicBluetooth {
-//                            //返回BT的地址和名称
-//                        }
-//                        //查询系统蓝牙是否已经绑定这个地址
-//                        val device = BleOperateManager.getInstance()
-//                            .getMacSystemBond(String mac)
-//                        //如果device ！=null代表已经绑定，调用连接
-//                        //rtk
-//                        BleOperateManager.getInstance().connectRtkSPP(device)
-//                        //bk
-//                        BleOperateManager.getInstance().createBondBlueTooth(device)
-//                        //如果没有绑定，device==null,启动经典蓝牙扫描，可自己实现
-//                        BleOperateManager.getInstance().classicBluetoothStartScan()
-//                        //监听系统经典蓝牙扫描广播监听，  BluetoothDevice.ACTION_FOUND
-//                        //通过返回的设备mac和手表给的匹配，
-//                        BleOperateManager.getInstance().connectRtkSPP(device)
+                    bt -> {
                     }
-                    btnDrink->{
-                        for(index in 0..6){
-                            val entity = AlarmEntity(index, 1, index+5, index*5, 0x80.toByte())
+                    btnDrink -> {
+                        for (index in 0..6) {
+                            val entity = AlarmEntity(index, 1, index + 5, index * 5, 0x80.toByte())
                             CommandHandle.getInstance().executeReqCmdNoCallback(
                                 SetDrinkAlarmReq(entity)
                             )
                         }
                     }
-                    btnSport->{
-//                        test.syncSport()
-//                        test.heartEnable()
-                        binding.tvHard.text=MyApplication.getInstance.hardwareVersion
-                        binding.tvFir.text=MyApplication.getInstance.firmwareVersion
+                    btnSport -> {
+                        binding.tvHard.text = MyApplication.getInstance.hardwareVersion
+                        binding.tvFir.text = MyApplication.getInstance.firmwareVersion
                     }
                 }
             }
-
         }
     }
 
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (newState == BluetoothGatt.STATE_CONNECTED) {
+                Log.i("MainActivity", "Connected to GATT server.")
+                gatt.discoverServices()
+            } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                Log.i("MainActivity", "Disconnected from GATT server. Status: $status")
+                runOnUiThread {
+                    binding.tvConnect.text = getString(R.string.disconnected)
+                }
+            } else {
+                Log.i("MainActivity", "Connection state changed. New state: $newState, Status: $status")
+            }
+        }
 
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.i("MainActivity", "Services discovered successfully.")
+                enableNotifications(gatt)
+            } else {
+                Log.w("MainActivity", "onServicesDiscovered received: $status")
+            }
+        }
 
-    inner class MyDeviceNotifyListener : DeviceNotifyListener() {
-        override fun onDataResponse(resultEntity: DeviceNotifyRsp?) {
-            if (resultEntity!!.status == BaseRspCmd.RESULT_OK) {
-                BleOperateManager.getInstance().removeOthersListener()
-                when (resultEntity.dataType) {
-                    1 -> {
-                        //手表心率测试
-                    }
-                    2 -> {
-                        //手表血压测试
-                    }
-                    3 -> {
-                        //手表血氧测试
-                    }
-                    4 -> {
-                        //手表计步详情变化
-                    }
-                    5 -> {
-                        //当天手表体温变化
-                    }
-                    7 -> {
-                        //生成新的运动记录
-                    }
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            Log.i("MainActivity", "Characteristic changed: ${characteristic.uuid}")
+            when (characteristic.uuid) {
+                UUID.fromString(STEP_COUNT_CHARACTERISTIC_UUID) -> {
+                    val steps = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0)
+                    runOnUiThread { updateSteps(steps) }
+                }
+                UUID.fromString(SPO2_CHARACTERISTIC_UUID) -> {
+                    val spo2 = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+                    runOnUiThread { updateSpO2(spo2) }
                 }
             }
         }
+
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.i("MainActivity", "Characteristic read: ${characteristic.uuid}")
+                when (characteristic.uuid) {
+                    UUID.fromString(STEP_COUNT_CHARACTERISTIC_UUID) -> {
+                        val steps = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0)
+                        runOnUiThread { updateSteps(steps) }
+                    }
+                    UUID.fromString(SPO2_CHARACTERISTIC_UUID) -> {
+                        val spo2 = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+                        runOnUiThread { updateSpO2(spo2) }
+                    }
+                }
+            } else {
+                Log.w("MainActivity", "onCharacteristicRead received: $status for ${characteristic.uuid}")
+            }
+        }
+    }
+
+    private fun enableNotifications(gatt: BluetoothGatt) {
+        val stepCharacteristic = gatt.getService(UUID.fromString(STEP_COUNT_SERVICE_UUID))
+            ?.getCharacteristic(UUID.fromString(STEP_COUNT_CHARACTERISTIC_UUID))
+        val spo2Characteristic = gatt.getService(UUID.fromString(SPO2_SERVICE_UUID))
+            ?.getCharacteristic(UUID.fromString(SPO2_CHARACTERISTIC_UUID))
+
+        gatt.setCharacteristicNotification(stepCharacteristic, true)
+        gatt.setCharacteristicNotification(spo2Characteristic, true)
+
+        stepCharacteristic?.getDescriptor(UUID.fromString(CLIENT_CHARACTERISTIC_CONFIG_UUID))?.let { descriptor ->
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(descriptor)
+        }
+        spo2Characteristic?.getDescriptor(UUID.fromString(CLIENT_CHARACTERISTIC_CONFIG_UUID))?.let { descriptor ->
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(descriptor)
+        }
+    }
+
+    private fun updateSteps(steps: Int) {
+        binding.tvSteps.text = "Steps: $steps"
+    }
+
+    private fun updateSpO2(spo2: Int) {
+        binding.tvSpo2.text = "SpO2: $spo2%"
+    }
+
+    private fun reconnectDevice() {
+        val deviceAddress = DeviceManager.getInstance().deviceAddress
+        if (deviceAddress != null) {
+            val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
+            val bluetoothAdapter = bluetoothManager.adapter
+            val device = bluetoothAdapter.getRemoteDevice(deviceAddress)
+            bluetoothGatt = device.connectGatt(this, false, gattCallback)
+        } else {
+            Log.w("MainActivity", "Device address is null, cannot reconnect")
+        }
+    }
+
+    private fun disconnectDevice() {
+        bluetoothGatt?.disconnect()
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+        binding.tvConnect.text = getString(R.string.disconnected)
     }
 
     override fun onResume() {
@@ -299,25 +344,9 @@ class MainActivity : AppCompatActivity() {
     inner class PermissionCallback : OnPermissionCallback {
         override fun onGranted(permissions: MutableList<String>, all: Boolean) {
             if (!all) {
-
-            }else{
+                // Handle partial permission grant
+            } else {
                 startKtxActivity<DeviceBindActivity>()
-            }
-        }
-
-        override fun onDenied(permissions: MutableList<String>, never: Boolean) {
-            super.onDenied(permissions, never)
-            if(never){
-                XXPermissions.startPermissionActivity(this@MainActivity, permissions);
-            }
-        }
-
-    }
-
-    inner class BluetoothPermissionCallback : OnPermissionCallback {
-        override fun onGranted(permissions: MutableList<String>, all: Boolean) {
-            if (!all) {
-
             }
         }
 
@@ -327,18 +356,68 @@ class MainActivity : AppCompatActivity() {
                 XXPermissions.startPermissionActivity(this@MainActivity, permissions)
             }
         }
-
     }
 
-    inner class AllPermissionCallback : OnPermissionCallback {
+    inner class BluetoothPermissionCallback : OnPermissionCallback {
         override fun onGranted(permissions: MutableList<String>, all: Boolean) {
-
+            if (!all) {
+                // Handle partial permission grant
+            }
         }
 
         override fun onDenied(permissions: MutableList<String>, never: Boolean) {
             super.onDenied(permissions, never)
-
+            if (never) {
+                XXPermissions.startPermissionActivity(this@MainActivity, permissions)
+            }
         }
     }
 
+    inner class AllPermissionCallback : OnPermissionCallback {
+        override fun onGranted(permissions: MutableList<String>, all: Boolean) {
+            // Handle all permissions granted
+        }
+
+        override fun onDenied(permissions: MutableList<String>, never: Boolean) {
+            super.onDenied(permissions, never)
+            // Handle permissions denied
+        }
+    }
+
+    inner class MyDeviceNotifyListener : DeviceNotifyListener() {
+        override fun onDataResponse(resultEntity: DeviceNotifyRsp?) {
+            if (resultEntity!!.status == BaseRspCmd.RESULT_OK) {
+                BleOperateManager.getInstance().removeOthersListener()
+                when (resultEntity.dataType) {
+                    1 -> {
+                        // Handle heart rate data
+                    }
+                    2 -> {
+                        // Handle blood pressure data
+                    }
+                    3 -> {
+                        // Handle blood oxygen data
+                        val spo2 = resultEntity.dataType.toInt() // Adjust as necessary
+                        updateSpO2(spo2)
+                    }
+                    4 -> {
+                        // Handle step count data
+                        val steps = resultEntity.dataType.toInt() // Adjust as necessary
+                        updateSteps(steps)
+                    }
+                    5 -> {
+                        // Handle temperature data
+                    }
+                }
+            }
+        }
+    }
+
+    companion object {
+        private const val STEP_COUNT_SERVICE_UUID = "0000181D-0000-1000-8000-00805f9b34fb"
+        private const val STEP_COUNT_CHARACTERISTIC_UUID = "00002A5B-0000-1000-8000-00805f9b34fb"
+        private const val SPO2_SERVICE_UUID = "00001822-0000-1000-8000-00805f9b34fb"
+        private const val SPO2_CHARACTERISTIC_UUID = "00002A5F-0000-1000-8000-00805f9b34fb"
+        private const val CLIENT_CHARACTERISTIC_CONFIG_UUID = "00002902-0000-1000-8000-00805f9b34fb"
+    }
 }

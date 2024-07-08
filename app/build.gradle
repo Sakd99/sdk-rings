@@ -43,6 +43,7 @@ android {
             dirs 'libs'
         }
     }
+    namespace 'com.qcwireless.sdksample'
 }
 
 dependencies {

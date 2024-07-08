@@ -37,4 +37,8 @@
     <string name="text_35">喝水</string>
     <string name="text_36">运动</string>
     <string name="text_37">手动压力</string>
+    <string name="disconnected" translatable="false">disconnected</string>
+    <string name="tvSteps" translatable="false">tvSteps</string>
+    <string name="tvSpo2" translatable="false">tvSpo2</string>
+
 </resources>
